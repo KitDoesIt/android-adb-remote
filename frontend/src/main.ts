@@ -238,9 +238,11 @@ interface Settings {
   menuFix: boolean;      // 菜单键修复：用 L (longpress) 序列注入菜单键
   dpadRepeat: boolean;   // 方向键长按自动重复
   simLongPress: boolean; // 模拟长按：短按=普通按下，长按=longpress（不采用 D/U 分离）
+  vibStrength: number;   // 振动强度档位（基础时长 ms）：25/50/100/125
 }
 
-let settings: Settings = { menuFix: false, dpadRepeat: true, simLongPress: false };
+const VIB_LEVELS = [25, 50, 100, 125];
+let settings: Settings = { menuFix: false, dpadRepeat: true, simLongPress: false, vibStrength: 25 };
 
 function loadSettings() {
   try {
@@ -260,6 +262,10 @@ function applySettings() {
   if (dpadRepeat) dpadRepeat.checked = settings.dpadRepeat;
   if (simLongPress) simLongPress.checked = settings.simLongPress;
   dpadRepeatEnabled = settings.dpadRepeat;
+  // 振动强度按钮高亮
+  document.querySelectorAll<HTMLButtonElement>(".vib-level-btn").forEach((b) => {
+    b.classList.toggle("active", Number(b.dataset.level) === settings.vibStrength);
+  });
 }
 
 function setMenuFix(on: boolean) {
@@ -279,6 +285,13 @@ function setSimLongPress(on: boolean) {
   settings.simLongPress = on;
   saveSettings();
   vibrate(28);
+}
+
+function setVibStrength(level: number) {
+  settings.vibStrength = level;
+  saveSettings();
+  applySettings();
+  vibrate(level); // 预览该档位
 }
 
 function openSettings() {
@@ -306,9 +319,14 @@ let vibSupported = typeof navigator.vibrate === "function";
 let vibLastOk: boolean | null = null; // null = never called
 
 function vibrate(pattern: number | number[]) {
+  // Scale by strength (base 25ms level)
+  const scale = settings.vibStrength / 25;
+  const scaled = Array.isArray(pattern)
+    ? pattern.map(p => Math.round(p * scale))
+    : Math.round(pattern * scale);
   try {
     if (typeof navigator.vibrate === "function") {
-      vibLastOk = navigator.vibrate(pattern);
+      vibLastOk = navigator.vibrate(scaled);
       vibSupported = true;
     } else {
       vibSupported = false;
@@ -789,6 +807,15 @@ function buildUI() {
             <div class="setting-desc" id="vibStatusText"></div>
           </div>
         </div>
+        <div class="setting-row setting-static">
+          <div class="setting-info">
+            <div class="setting-name">${t("vibStrength")}</div>
+            <div class="setting-desc">${t("vibStrengthDesc")}</div>
+          </div>
+          <div class="vib-levels">
+            ${VIB_LEVELS.map(l => `<button class="vib-level-btn" data-level="${l}">${l}</button>`).join("")}
+          </div>
+        </div>
         <div class="modal-row">
           <button class="btn-cancel" id="btnCloseSettings">${t("close")}</button>
         </div>
@@ -833,6 +860,9 @@ function bindEvents() {
   });
   document.getElementById("simLongPressToggle")?.addEventListener("change", (e) => {
     setSimLongPress((e.target as HTMLInputElement).checked);
+  });
+  document.querySelectorAll<HTMLButtonElement>(".vib-level-btn").forEach((b) => {
+    b.addEventListener("click", () => setVibStrength(Number(b.dataset.level)));
   });
   // 点击遮罩关闭设置
   document.getElementById("settingsModal")?.addEventListener("click", (e) => {
