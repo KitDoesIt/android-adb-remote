@@ -63,6 +63,12 @@ function connectWS() {
       return;
     }
     
+    // App icons pushed over WS as base64 (works in PWA standalone)
+    if (data.type === "icons") {
+      storeIconsFromWS(data.icons);
+      return;
+    }
+    
     // TV editable-field state (from daemon watcher)
     if (data.type === "inputState") {
       tvInputEditable = data.editable;
@@ -108,6 +114,25 @@ function updateTvInputIndicator() {
   } else {
     btn.classList.remove("tv-input-active");
     dot?.remove();
+  }
+}
+
+// Store base64 icons received over WS into IndexedDB, then re-render
+async function storeIconsFromWS(icons: Record<string, string>) {
+  let changed = false;
+  for (const [pkg, b64] of Object.entries(icons)) {
+    try {
+      const bin = atob(b64);
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      await idbPutBlob(pkg, new Blob([bytes], { type: "image/png" }));
+      iconUrlCache.delete(pkg); // next loadAppIcon rebuilds the blob URL
+      changed = true;
+    } catch {}
+  }
+  if (changed) {
+    renderFavorites();
+    renderPicker(allApps);
   }
 }
 

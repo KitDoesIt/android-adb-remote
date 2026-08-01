@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
 const PORT = parseInt(process.env.PORT || "8180");
@@ -368,33 +368,52 @@ async function generateAppIcons(pkgs: string[]) {
     mkdirSync(ICON_CACHE_DIR, { recursive: true });
     // Only generate icons that aren't cached yet
     const missing = pkgs.filter(p => !existsSync(join(ICON_CACHE_DIR, `${p}.png`)));
-    if (missing.length === 0) return;
-    console.log(`   🖼 Generating ${missing.length} app icons…`);
+    if (missing.length > 0) {
+      console.log(`   🖼 Generating ${missing.length} app icons…`);
 
-    // Batch: one daemon session generates all icons (JVM starts once)
-    const script = missing.map(p => `I ${p}`).join("\n") + "\nexit\n";
-    const proc = Bun.spawn(
-      ["adb", "-s", ADB_DEVICE, "shell", `app_process -Djava.class.path=${KEYD_DEX} /data/local/tmp KeyDaemon`],
-      { stdin: "pipe", stdout: "pipe", stderr: "pipe" }
-    );
-    proc.stdin.write(script);
-    proc.stdin.end(); // close stdin → daemon sees EOF and exits
-    await proc.exited;
+      // Batch: one daemon session generates all icons (JVM starts once)
+      const script = missing.map(p => `I ${p}`).join("\n") + "\nexit\n";
+      const proc = Bun.spawn(
+        ["adb", "-s", ADB_DEVICE, "shell", `app_process -Djava.class.path=${KEYD_DEX} /data/local/tmp KeyDaemon`],
+        { stdin: "pipe", stdout: "pipe", stderr: "pipe" }
+      );
+      proc.stdin.write(script);
+      proc.stdin.end(); // close stdin → daemon sees EOF and exits
+      await proc.exited;
 
-    // Pull icons (4 at a time)
-    const chunks: string[][] = [];
-    for (let i = 0; i < missing.length; i += 4) chunks.push(missing.slice(i, i + 4));
-    for (const chunk of chunks) {
-      await Promise.all(chunk.map(async pkg => {
-        await adb(["pull", `/data/local/tmp/icon_${pkg}.png`, join(ICON_CACHE_DIR, `${pkg}.png`)]);
-      }));
+      // Pull icons (4 at a time)
+      const chunks: string[][] = [];
+      for (let i = 0; i < missing.length; i += 4) chunks.push(missing.slice(i, i + 4));
+      for (const chunk of chunks) {
+        await Promise.all(chunk.map(async pkg => {
+          await adb(["pull", `/data/local/tmp/icon_${pkg}.png`, join(ICON_CACHE_DIR, `${pkg}.png`)]);
+        }));
+      }
+      console.log(`   ✓ App icons cached (${missing.length})`);
     }
-    console.log(`   ✓ App icons cached (${missing.length})`);
   } catch (e) {
     console.log("   ⚠ Icon generation failed:", e);
   } finally {
     iconGenInFlight = false;
   }
+
+  // Broadcast ALL cached icons as base64 over WS — works in PWA standalone
+  // mode where plain fetch of /icons/... may fail (SW/scope issues).
+  try {
+    const icons: Record<string, string> = {};
+    const files = readdirSync(ICON_CACHE_DIR).filter(f => f.endsWith(".png"));
+    for (const f of files) {
+      const pkg = f.slice(0, -4);
+      try {
+        const buf = await Bun.file(join(ICON_CACHE_DIR, f)).arrayBuffer();
+        icons[pkg] = Buffer.from(buf).toString("base64");
+      } catch {}
+    }
+    if (Object.keys(icons).length > 0) {
+      broadcast({ type: "icons", icons });
+      console.log(`   📡 Broadcast ${Object.keys(icons).length} icons over WS`);
+    }
+  } catch {}
 }
 
 // ── WebSocket message handling ───────────────────────────────────────
