@@ -1,0 +1,47 @@
+# TV Remote — two-container example
+#
+#   adb        : adb server container (manages the TV device)
+#   tv-remote  : our remote web app (adb client via ADB_SERVER_SOCKET)
+#
+# Both containers share the `app-net` bridge network; the tv-remote
+# container reaches the adb server at the container name `adb:5037`.
+#
+# Usage:
+#   cp .env.example .env   # set ADB_DEVICE to your TV
+#   docker compose up -d
+#   open http://<host-ip>:8180
+
+services:
+  adb:
+    # Community adb image; any image containing adb works (ours does too).
+    image: sorccu/adb:latest
+    container_name: adb
+    # Listen on all interfaces so the app container can connect.
+    command: ["-a", "nodaemon", "server", "start"]
+    # USB-attached devices (Linux host only) need device passthrough:
+    #   privileged: true
+    #   volumes:
+    #     - /dev/bus/usb:/dev/bus/usb
+    networks:
+      - app-net
+    restart: unless-stopped
+
+  tv-remote:
+    image: ghcr.io/kitdoesit/android-adb-remote:latest
+    container_name: tv-remote
+    environment:
+      # Point adb client at the adb-server container (same network).
+      ADB_SERVER_SOCKET: tcp:adb:5037
+      # IP of your TV (e.g. 192.168.1.100:5555)
+      ADB_DEVICE: ${ADB_DEVICE:?set ADB_DEVICE in .env}
+    ports:
+      - "8180:8180"
+    networks:
+      - app-net
+    depends_on:
+      - adb
+    restart: unless-stopped
+
+networks:
+  app-net:
+    driver: bridge
