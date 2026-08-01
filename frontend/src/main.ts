@@ -274,6 +274,11 @@ function setDpadRepeat(on: boolean) {
 
 function openSettings() {
   applySettings();
+  // Show vibration availability
+  const text = document.getElementById("vibStatusText")!;
+  text.textContent = typeof navigator.vibrate === "function"
+    ? t("vibAvailable")
+    : t("vibUnavailable");
   document.getElementById("settingsModal")!.classList.remove("hidden");
 }
 function closeSettings() {
@@ -709,6 +714,12 @@ function buildUI() {
           </div>
           <input type="checkbox" class="toggle" id="dpadRepeatToggle">
         </label>
+        <div class="setting-row setting-static" id="vibStatus">
+          <div class="setting-info">
+            <div class="setting-name">${t("vibration")}</div>
+            <div class="setting-desc" id="vibStatusText"></div>
+          </div>
+        </div>
         <div class="modal-row">
           <button class="btn-cancel" id="btnCloseSettings">${t("close")}</button>
         </div>
@@ -738,6 +749,9 @@ function buildUI() {
 
 // ── Bind events ──────────────────────────────────────────
 function bindEvents() {
+  // Suppress native long-press / right-click context menu everywhere
+  document.addEventListener("contextmenu", (e) => e.preventDefault());
+  
   document.getElementById("statusArea")?.addEventListener("click", reconnect);
   document.getElementById("btnForceReconnect")?.addEventListener("click", forceReconnect);
   document.getElementById("btnSettings")?.addEventListener("click", openSettings);
