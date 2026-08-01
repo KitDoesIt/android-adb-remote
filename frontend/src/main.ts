@@ -27,8 +27,6 @@ function connectWS() {
   ws.onopen = () => {
     console.log("WS open");
     updateConnectionUI("connected");
-    // Request initial data
-    sendWS({ favGet: true });
   };
   
   ws.onclose = () => {
@@ -53,13 +51,6 @@ function connectWS() {
     if (data.type === "apps") {
       allApps = data.apps;
       renderPicker(allApps);
-      return;
-    }
-    
-    // Favorites response
-    if (data.type === "favorites") {
-      favorites = data.favorites;
-      renderFavorites();
       return;
     }
     
@@ -488,14 +479,29 @@ function clearTextField() {
   sendWS({ clear: true });
 }
 
-// ── Favorites ─────────────────────────────────────────────
-async function addFavorite(pkg: string, label: string) {
-  sendWS({ favAdd: { pkg, label } });
+// ── Favorites (browser-local via localStorage) ───────────
+const FAV_KEY = "tv-remote-favorites";
+
+function loadFavoritesLocal(): FavEntry[] {
+  try { return JSON.parse(localStorage.getItem(FAV_KEY) || "[]"); } catch { return []; }
+}
+function saveFavoritesLocal(favs: FavEntry[]) {
+  try { localStorage.setItem(FAV_KEY, JSON.stringify(favs)); } catch {}
+}
+
+function addFavorite(pkg: string, label: string) {
+  if (!favorites.find(f => f.pkg === pkg)) {
+    favorites.push({ pkg, label });
+    saveFavoritesLocal(favorites);
+    renderFavorites();
+  }
   showToast(`${t("toastAdded")}: ${label}`);
   closePicker();
 }
 function removeFavorite(pkg: string) {
-  sendWS({ favDel: pkg });
+  favorites = favorites.filter(f => f.pkg !== pkg);
+  saveFavoritesLocal(favorites);
+  renderFavorites();
   showToast(t("toastRemoved"));
 }
 
@@ -549,14 +555,16 @@ async function saveEdit() {
     await idbPutBlob(`custom_${editPkg}`, editIconBlob);
     iconUrlCache.set(`custom_${editPkg}`, URL.createObjectURL(editIconBlob));
   }
-  sendWS({ favUpdate: { pkg: editPkg, label: name } });
+  const f = favorites.find(x => x.pkg === editPkg);
+  if (f) f.label = name;
+  saveFavoritesLocal(favorites);
+  renderFavorites();
   showToast(t("toastSaved"));
   closeEditModal();
 }
 
 function deleteEditApp() {
-  sendWS({ favDel: editPkg });
-  showToast(t("toastRemoved"));
+  removeFavorite(editPkg);
   closeEditModal();
 }
 
@@ -906,9 +914,11 @@ function bindEvents() {
 
 // ── Init ─────────────────────────────────────────────────
 loadSettings();
+favorites = loadFavoritesLocal();
 buildUI();
 bindEvents();
 applySettings();
+renderFavorites();
 connectWS();
 
 // Handle virtual keyboard — adjust modal position when keyboard opens
