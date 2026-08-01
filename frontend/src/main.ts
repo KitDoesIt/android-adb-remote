@@ -850,19 +850,6 @@ function buildUI() {
 function bindEvents() {
   // Suppress native long-press / right-click context menu everywhere
   document.addEventListener("contextmenu", (e) => e.preventDefault());
-  
-  // 屏蔽下拉刷新：页面在顶部时拦截下拉手势（配合 overscroll-behavior: none）
-  let pullStartY = 0;
-  document.addEventListener("touchstart", (e) => {
-    pullStartY = e.touches[0]?.clientY ?? 0;
-  }, { passive: true });
-  document.addEventListener("touchmove", (e) => {
-    const y = e.touches[0]?.clientY ?? 0;
-    const atTop = document.documentElement.scrollTop <= 0 && document.body.scrollTop <= 0;
-    if (atTop && y > pullStartY && e.cancelable) {
-      e.preventDefault();
-    }
-  }, { passive: false });
   document.getElementById("statusArea")?.addEventListener("click", reconnect);
   document.getElementById("btnForceReconnect")?.addEventListener("click", forceReconnect);
   document.getElementById("btnSettings")?.addEventListener("click", openSettings);
