@@ -812,14 +812,12 @@ function buildUI() {
           </div>
           <input type="checkbox" class="toggle" id="simLongPressToggle">
         </label>
-        <div class="setting-row setting-static">
-          <div class="setting-info">
-            <div class="setting-name">${t("vibration")}</div>
-            <div class="setting-desc" id="vibStatusText"></div>
-          </div>
+        <div class="setting-row setting-static vib-col">
+          <div class="setting-name">${t("vibration")}</div>
           <div class="vib-levels">
             ${VIB_LEVELS.map(l => `<button class="vib-level-btn" data-level="${l}">${l}</button>`).join("")}
           </div>
+          <div class="setting-desc" id="vibStatusText"></div>
         </div>
         <div class="modal-row">
           <button class="btn-cancel" id="btnCloseSettings">${t("close")}</button>

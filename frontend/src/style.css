@@ -193,6 +193,12 @@ html, body {
   gap: 6px;
   flex-shrink: 0;
 }
+.vib-col {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+.vib-col .vib-levels { align-self: center; }
 .vib-level-btn {
   width: 40px;
   height: 34px;
