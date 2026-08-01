@@ -19,7 +19,27 @@
 
 进入电视的 **开发者选项**，开启 **USB 调试 / ADB 调试**。首次连接时电视会弹出授权确认，选择"始终允许"。
 
-### 2. 运行容器
+### 2. 运行容器（二选一）
+
+**Docker Compose（推荐）** —— 新建 `docker-compose.yml`：
+
+```yaml
+services:
+  tv-remote:
+    image: ghcr.io/kitdoesit/android-adb-remote:latest
+    container_name: tv-remote
+    environment:
+      ADB_DEVICE: 192.168.x.x:5555   # 换成你电视的 IP
+    ports:
+      - "8180:8180"
+    restart: unless-stopped
+```
+
+```bash
+docker compose up -d
+```
+
+**或直接 docker run：**
 
 ```bash
 docker run -d \
@@ -30,7 +50,7 @@ docker run -d \
   ghcr.io/kitdoesit/android-adb-remote:latest
 ```
 
-把 `192.168.x.x` 换成你电视的 IP 地址。
+> 容器通过 Docker NAT 直接访问你电视的局域网地址，无需额外配置。
 
 ### 3. 使用
 
