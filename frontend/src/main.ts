@@ -506,16 +506,11 @@ function addFavorite(pkg: string, label: string) {
 }
 
 async function persistIconSnapshot(pkg: string) {
-  try {
-    // 优先用内存最新 blob（WS 广播过）
-    let blob = iconBlobCache.get(pkg);
-    if (!blob) {
-      const res = await fetch(`/icons/apps/${encodeURIComponent(pkg)}.png?t=${Date.now()}`);
-      if (!res.ok) return;
-      blob = await res.blob();
-    }
-    await idbPutBlob(pkg, blob);
-  } catch {}
+  // 只用 WS 广播的最新 blob（无 HTTP 下载）
+  const blob = iconBlobCache.get(pkg);
+  if (blob) {
+    try { await idbPutBlob(pkg, blob); } catch {}
+  }
 }
 function removeFavorite(pkg: string) {
   favorites = favorites.filter(f => f.pkg !== pkg);
@@ -533,24 +528,17 @@ async function openEditModal(pkg: string, label: string) {
   editIconBlob = null;
   (document.getElementById("editName") as HTMLInputElement).value = label;
   (document.getElementById("editFile") as HTMLInputElement).value = "";
-  // Preview: custom icon → cached icon → fetch default (don't touch siblings)
+  // Preview: custom icon → IndexedDB snapshot → WS latest (no HTTP fetch)
   const preview = document.getElementById("editIconPreview") as HTMLImageElement;
   const custom = await idbGetBlob(`custom_${pkg}`);
   if (custom) {
     preview.src = URL.createObjectURL(custom);
+  } else if (iconUrlCache.get(`snap_${pkg}`)) {
+    preview.src = iconUrlCache.get(`snap_${pkg}`)!;
   } else if (iconUrlCache.get(pkg)) {
     preview.src = iconUrlCache.get(pkg)!;
-  } else {
-    try {
-      const res = await fetch(`/icons/apps/${encodeURIComponent(pkg)}.png`);
-      if (res.ok) {
-        const b = await res.blob();
-        await idbPutBlob(pkg, b);
-        const u = URL.createObjectURL(b);
-        iconUrlCache.set(pkg, u);
-        preview.src = u;
-      }
-    } catch {}
+  } else if (iconBlobCache.get(pkg)) {
+    preview.src = URL.createObjectURL(iconBlobCache.get(pkg)!);
   }
   preview.classList.remove("hidden");
   document.getElementById("editModal")!.classList.remove("hidden");
@@ -739,21 +727,10 @@ async function loadLatestIcon(img: HTMLImageElement, pkg: string) {
     img.classList.remove("hidden");
     img.nextElementSibling?.classList.add("hidden");
   };
-  // 1. 内存最新（WS 广播过）
+  // 只用 WS 广播的最新图标（无 HTTP 下载）
   const latest = iconUrlCache.get(pkg);
   if (latest) { showImage(latest); return; }
-  // 2. fetch 服务器（带时间戳防缓存）
-  try {
-    const res = await fetch(`/icons/apps/${encodeURIComponent(pkg)}.png?t=${Date.now()}`);
-    if (res.ok) {
-      const b = await res.blob();
-      iconBlobCache.set(pkg, b);
-      const u = URL.createObjectURL(b);
-      iconUrlCache.set(pkg, u);
-      showImage(u);
-      return;
-    }
-  } catch {}
+  // WS 图标尚未到达：显示占位，广播到达后 renderPicker 会刷新
   showFallback();
 }
 
