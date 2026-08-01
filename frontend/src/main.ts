@@ -366,7 +366,7 @@ function sendKeyDown(key: string) {
     simTimer = setTimeout(() => {
       simLongPressed = true;
       vibrate(20);
->      // 长按：down 保持，让 app 自己检测长按
+      // 长按：down 保持，让 app 自己检测长按
       sendWS({ keydown: key });
     }, SIM_LONG_PRESS_MS);
     return;
