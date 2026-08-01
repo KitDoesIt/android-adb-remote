@@ -10,18 +10,12 @@ COPY frontend ./frontend
 COPY public ./public
 RUN bun run build.ts
 
-# ── Runtime ──────────────────────────────────────────────
-FROM debian:bookworm-slim
+# ── Runtime: official bun image + adb ─────────────────────
+FROM oven/bun:1-slim
 
-# ADB + Bun
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl \
-    ca-certificates \
-    unzip \
     android-tools-adb \
-    && rm -rf /var/lib/apt/lists/* \
-    && curl -fsSL https://bun.sh/install | bash
-ENV PATH="/root/.bun/bin:${PATH}"
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 COPY --from=builder /app/ ./
