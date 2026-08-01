@@ -27,7 +27,7 @@ docker run -d \
   --restart unless-stopped \
   -e ADB_DEVICE=192.168.x.x:5555 \
   -p 8180:8180 \
-  tv-remote:latest
+  ghcr.io/kitdoesit/android-adb-remote:latest
 ```
 
 把 `192.168.x.x` 换成你电视的 IP 地址。
