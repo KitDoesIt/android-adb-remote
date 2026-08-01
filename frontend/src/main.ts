@@ -230,8 +230,13 @@ let dpadRepeatTimer: ReturnType<typeof setInterval> | null = null;
 let dpadRepeatTimeout: ReturnType<typeof setTimeout> | null = null;
 let dpadRepeatKey: string | null = null;
 const DPAD_KEYS = new Set(["up", "down", "left", "right"]);
-const REPEAT_TIMEOUT = 500;
+const REPEAT_TIMEOUT = 500; // D-pad repeat 启动延迟（保持 Android 默认）
 const REPEAT_DELAY = 50;
+// 模拟长按模式的判定阈值：按住超过此值即判定长按并发送 down。
+// 取 Android TAP_TIMEOUT 区间（100-180ms）内的 150ms：
+// 更短的点击走完整 tap（避免分离 D/U 被应用误解），
+// 更长的按住立即 down 保持，让应用自身的长按计时尽快开始。
+const SIM_LONG_PRESS_MS = 150;
 
 // ── Settings (persisted in localStorage) ────────────────
 interface Settings {
@@ -361,9 +366,9 @@ function sendKeyDown(key: string) {
     simTimer = setTimeout(() => {
       simLongPressed = true;
       vibrate(20);
-      // 长按：down 保持，让 app 自己检测长按
+>      // 长按：down 保持，让 app 自己检测长按
       sendWS({ keydown: key });
-    }, REPEAT_TIMEOUT);
+    }, SIM_LONG_PRESS_MS);
     return;
   }
 
