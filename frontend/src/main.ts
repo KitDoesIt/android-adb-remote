@@ -802,9 +802,8 @@ function buildUI() {
       <div class="modal-box">
         <h2>${ic("app-window", 18)} ${t("pickerTitle")}</h2>
         <input type="text" id="appSearch" placeholder="${t("searchPlaceholder")}">
-        <div class="app-picker-list" id="appPickerList">
-          <div class="spinner" id="appSpinner"></div>
-        </div>
+        <div class="spinner" id="appSpinner"></div>
+        <div class="app-picker-list" id="appPickerList"></div>
         <div class="modal-row">
           <button class="btn-cancel" id="btnCancelPicker">${ic("x", 18)} ${t("cancel")}</button>
         </div>
