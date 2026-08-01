@@ -235,11 +235,12 @@ const REPEAT_DELAY = 50;
 
 // ── Settings (persisted in localStorage) ────────────────
 interface Settings {
-  menuFix: boolean;   // 菜单键修复：用 L (longpress) 序列注入菜单键
-  dpadRepeat: boolean; // 方向键长按自动重复
+  menuFix: boolean;      // 菜单键修复：用 L (longpress) 序列注入菜单键
+  dpadRepeat: boolean;   // 方向键长按自动重复
+  simLongPress: boolean; // 模拟长按：短按=普通按下，长按=longpress（不采用 D/U 分离）
 }
 
-let settings: Settings = { menuFix: false, dpadRepeat: true };
+let settings: Settings = { menuFix: false, dpadRepeat: true, simLongPress: false };
 
 function loadSettings() {
   try {
@@ -254,8 +255,10 @@ function saveSettings() {
 function applySettings() {
   const menuFix = document.getElementById("menuFixToggle") as HTMLInputElement;
   const dpadRepeat = document.getElementById("dpadRepeatToggle") as HTMLInputElement;
+  const simLongPress = document.getElementById("simLongPressToggle") as HTMLInputElement;
   if (menuFix) menuFix.checked = settings.menuFix;
   if (dpadRepeat) dpadRepeat.checked = settings.dpadRepeat;
+  if (simLongPress) simLongPress.checked = settings.simLongPress;
   dpadRepeatEnabled = settings.dpadRepeat;
 }
 
@@ -268,6 +271,12 @@ function setMenuFix(on: boolean) {
 function setDpadRepeat(on: boolean) {
   settings.dpadRepeat = on;
   dpadRepeatEnabled = on;
+  saveSettings();
+  vibrate(28);
+}
+
+function setSimLongPress(on: boolean) {
+  settings.simLongPress = on;
   saveSettings();
   vibrate(28);
 }
@@ -316,10 +325,28 @@ function sendKey(key: string) {
   sendWS({ key });
 }
 
+// ── Sim long-press mode state ──────────────────────────
+let simKey: string | null = null;
+let simLongPressed = false;
+let simTimer: ReturnType<typeof setTimeout> | null = null;
+
 function sendKeyDown(key: string) {
   const btn = document.querySelector(`[data-key="${key}"]`);
   if (btn) btn.classList.add("pressed");
   vibrate(28); // short tick on press
+
+  // 模拟长按模式：不用 D/U 分离。短按抬起→普通按下(tap)；
+  // 按住超过阈值→longpress(L)。行为更稳定（部分应用对分离事件处理怪异）。
+  if (settings.simLongPress) {
+    simKey = key;
+    simLongPressed = false;
+    simTimer = setTimeout(() => {
+      simLongPressed = true;
+      vibrate(20);
+      sendWS({ keyLong: key }); // L 命令：down + down(FLAG_LONG_PRESS) + up
+    }, REPEAT_TIMEOUT);
+    return;
+  }
 
   // 菜单键修复：开启时用 L (longpress 序列) 一次性发送，松开不再发 keyup
   if (settings.menuFix && key === "menu") {
@@ -346,6 +373,22 @@ function sendKeyDown(key: string) {
 function sendKeyUp(key: string) {
   const btn = document.querySelector(`[data-key="${key}"]`);
   if (btn) btn.classList.remove("pressed");
+
+  // 模拟长按模式：短按→普通 tap；长按已由 timer 发送 L，这里只清理
+  if (settings.simLongPress) {
+    if (simTimer) { clearTimeout(simTimer); simTimer = null; }
+    if (simKey === key && !simLongPressed) {
+      // 短按：普通按下（tap）。菜单键修复时仍用 L
+      if (settings.menuFix && key === "menu") {
+        sendWS({ keyLong: key });
+      } else {
+        sendWS({ key });
+      }
+    }
+    simKey = null;
+    return;
+  }
+
   // 菜单键修复模式下 keyLong 已含完整 down+up 序列，跳过 keyup
   if (settings.menuFix && key === "menu") return;
   if (dpadRepeatKey === key) {
@@ -733,6 +776,13 @@ function buildUI() {
           </div>
           <input type="checkbox" class="toggle" id="dpadRepeatToggle">
         </label>
+        <label class="setting-row">
+          <div class="setting-info">
+            <div class="setting-name">${t("settingSimLongPress")}</div>
+            <div class="setting-desc">${t("settingSimLongPressDesc")}</div>
+          </div>
+          <input type="checkbox" class="toggle" id="simLongPressToggle">
+        </label>
         <div class="setting-row setting-static" id="vibStatus">
           <div class="setting-info">
             <div class="setting-name">${t("vibration")}</div>
@@ -780,6 +830,9 @@ function bindEvents() {
   });
   document.getElementById("dpadRepeatToggle")?.addEventListener("change", (e) => {
     setDpadRepeat((e.target as HTMLInputElement).checked);
+  });
+  document.getElementById("simLongPressToggle")?.addEventListener("change", (e) => {
+    setSimLongPress((e.target as HTMLInputElement).checked);
   });
   // 点击遮罩关闭设置
   document.getElementById("settingsModal")?.addEventListener("click", (e) => {
