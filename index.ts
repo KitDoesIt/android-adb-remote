@@ -366,13 +366,16 @@ async function generateAppIcons(pkgs: string[]) {
   iconGenInFlight = true;
   try {
     mkdirSync(ICON_CACHE_DIR, { recursive: true });
-    // Only generate icons that aren't cached yet
-    const missing = pkgs.filter(p => !existsSync(join(ICON_CACHE_DIR, `${p}.png`)));
-    if (missing.length > 0) {
-      console.log(`   🖼 Generating ${missing.length} app icons…`);
+    // Always regenerate ALL icons so the picker shows the latest artwork
+    // (apps may update their icons; stale cache would hide that)
+    if (pkgs.length > 0) {
+      console.log(`   🖼 Regenerating ${pkgs.length} app icons…`);
+
+      // Clear stale icon files on the device
+      await adb(["shell", "-T", "rm -f /data/local/tmp/icon_*.png"]);
 
       // Batch: one daemon session generates all icons (JVM starts once)
-      const script = missing.map(p => `I ${p}`).join("\n") + "\nexit\n";
+      const script = pkgs.map(p => `I ${p}`).join("\n") + "\nexit\n";
       const proc = Bun.spawn(
         ["adb", "-s", ADB_DEVICE, "shell", `app_process -Djava.class.path=${KEYD_DEX} /data/local/tmp KeyDaemon`],
         { stdin: "pipe", stdout: "pipe", stderr: "pipe" }
@@ -381,15 +384,15 @@ async function generateAppIcons(pkgs: string[]) {
       proc.stdin.end(); // close stdin → daemon sees EOF and exits
       await proc.exited;
 
-      // Pull icons (4 at a time)
+      // Pull icons (4 at a time), overwriting the local cache
       const chunks: string[][] = [];
-      for (let i = 0; i < missing.length; i += 4) chunks.push(missing.slice(i, i + 4));
+      for (let i = 0; i < pkgs.length; i += 4) chunks.push(pkgs.slice(i, i + 4));
       for (const chunk of chunks) {
         await Promise.all(chunk.map(async pkg => {
           await adb(["pull", `/data/local/tmp/icon_${pkg}.png`, join(ICON_CACHE_DIR, `${pkg}.png`)]);
         }));
       }
-      console.log(`   ✓ App icons cached (${missing.length})`);
+      console.log(`   ✓ App icons refreshed (${pkgs.length})`);
     }
   } catch (e) {
     console.log("   ⚠ Icon generation failed:", e);

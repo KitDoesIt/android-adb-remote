@@ -108,7 +108,8 @@ function updateTvInputIndicator() {
   }
 }
 
-// Store base64 icons received over WS into IndexedDB, then re-render
+// Latest icons pushed over WS — keep in memory only (picker always shows
+// the freshest); favorites get a snapshot persisted at addFavorite time.
 async function storeIconsFromWS(icons: Record<string, string>) {
   let changed = false;
   for (const [pkg, b64] of Object.entries(icons)) {
@@ -116,8 +117,11 @@ async function storeIconsFromWS(icons: Record<string, string>) {
       const bin = atob(b64);
       const bytes = new Uint8Array(bin.length);
       for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-      await idbPutBlob(pkg, new Blob([bytes], { type: "image/png" }));
-      iconUrlCache.delete(pkg); // next loadAppIcon rebuilds the blob URL
+      const blob = new Blob([bytes], { type: "image/png" });
+      iconBlobCache.set(pkg, blob);
+      const old = iconUrlCache.get(pkg);
+      iconUrlCache.set(pkg, URL.createObjectURL(blob));
+      if (old?.startsWith("blob:")) URL.revokeObjectURL(old);
       changed = true;
     } catch {}
   }
@@ -495,8 +499,23 @@ function addFavorite(pkg: string, label: string) {
     saveFavoritesLocal(favorites);
     renderFavorites();
   }
+  // 收藏时保存当前最新图标快照到 IndexedDB（持久）
+  persistIconSnapshot(pkg);
   showToast(`${t("toastAdded")}: ${label}`);
   closePicker();
+}
+
+async function persistIconSnapshot(pkg: string) {
+  try {
+    // 优先用内存最新 blob（WS 广播过）
+    let blob = iconBlobCache.get(pkg);
+    if (!blob) {
+      const res = await fetch(`/icons/apps/${encodeURIComponent(pkg)}.png?t=${Date.now()}`);
+      if (!res.ok) return;
+      blob = await res.blob();
+    }
+    await idbPutBlob(pkg, blob);
+  } catch {}
 }
 function removeFavorite(pkg: string) {
   favorites = favorites.filter(f => f.pkg !== pkg);
@@ -632,14 +651,15 @@ function renderPicker(apps: AppInfo[]) {
   list.querySelectorAll<HTMLElement>(".picker-item").forEach(item => {
     item.addEventListener("click", () => addFavorite(item.dataset.pkg!, item.dataset.label!));
     const img = item.querySelector<HTMLImageElement>("img.app-img");
-    if (img) loadAppIcon(img, img.dataset.pkg!);
+    if (img) loadLatestIcon(img, img.dataset.pkg!); // 列表始终显示最新图标
   });
 }
 
-// ── App icon cache (IndexedDB + in-memory blob URLs) ────────────────
+// ── App icon cache (IndexedDB for favorites snapshots + in-memory latest) ─
 const IDB_NAME = "tv-remote-icons";
 const IDB_STORE = "icons";
-const iconUrlCache = new Map<string, string>(); // pkg -> blob URL
+const iconUrlCache = new Map<string, string>(); // pkg -> blob URL (latest, memory)
+const iconBlobCache = new Map<string, Blob>();  // pkg -> latest blob (memory, for picker + fav snapshots)
 
 function openIconDB(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
@@ -684,7 +704,8 @@ async function loadAppIcon(img: HTMLImageElement, pkg: string) {
     img.classList.remove("hidden");
     img.nextElementSibling?.classList.add("hidden");
   };
-  // 0. User-uploaded custom icon (stored under custom_<pkg>)
+  // 收藏显示：自定义图标 → IndexedDB 快照 → 内存最新 → 服务器
+  // 0. 用户上传的自定义图标
   const custom = await idbGetBlob(`custom_${pkg}`);
   if (custom) {
     let u = iconUrlCache.get(`custom_${pkg}`);
@@ -692,26 +713,44 @@ async function loadAppIcon(img: HTMLImageElement, pkg: string) {
     showImage(u);
     return;
   }
-  // 1. In-memory blob URL
-  let url = iconUrlCache.get(pkg);
-  if (url) { showImage(url); return; }
-  // 2. IndexedDB
+  // 1. 收藏快照（添加收藏时保存）
   const blob = await idbGetBlob(pkg);
   if (blob) {
-    url = URL.createObjectURL(blob);
-    iconUrlCache.set(pkg, url);
-    showImage(url);
+    let u = iconUrlCache.get(`snap_${pkg}`);
+    if (!u) { u = URL.createObjectURL(blob); iconUrlCache.set(`snap_${pkg}`, u); }
+    showImage(u);
     return;
   }
-  // 3. Fetch from server, then persist locally
+  // 2. 内存最新（若有）
+  const latest = iconUrlCache.get(pkg);
+  if (latest) { showImage(latest); return; }
+  // 3. 服务器
+  await loadLatestIcon(img, pkg);
+}
+
+// 应用列表：始终获取最新图标（内存，不落 IndexedDB）
+async function loadLatestIcon(img: HTMLImageElement, pkg: string) {
+  const showFallback = () => {
+    img.classList.add("hidden");
+    img.nextElementSibling?.classList.remove("hidden");
+  };
+  const showImage = (url: string) => {
+    img.src = url;
+    img.classList.remove("hidden");
+    img.nextElementSibling?.classList.add("hidden");
+  };
+  // 1. 内存最新（WS 广播过）
+  const latest = iconUrlCache.get(pkg);
+  if (latest) { showImage(latest); return; }
+  // 2. fetch 服务器（带时间戳防缓存）
   try {
-    const res = await fetch(`/icons/apps/${encodeURIComponent(pkg)}.png`);
+    const res = await fetch(`/icons/apps/${encodeURIComponent(pkg)}.png?t=${Date.now()}`);
     if (res.ok) {
       const b = await res.blob();
-      await idbPutBlob(pkg, b);
-      url = URL.createObjectURL(b);
-      iconUrlCache.set(pkg, url);
-      showImage(url);
+      iconBlobCache.set(pkg, b);
+      const u = URL.createObjectURL(b);
+      iconUrlCache.set(pkg, u);
+      showImage(u);
       return;
     }
   } catch {}
