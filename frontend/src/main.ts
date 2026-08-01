@@ -358,9 +358,10 @@ function sendKeyDown(key: string) {
   if (btn) btn.classList.add("pressed");
   vibrate(28); // short tick on press
 
-  // 模拟长按模式：不用 D/U 分离发送短按。短按抬起→完整 tap；
+  // 模拟长按模式（仅非方向键）：短按→完整 tap；
   // 长按（≥阈值）→ down 保持（app 自行检测长按，如 YouTube 菜单）→ 松手 up。
-  if (settings.simLongPress) {
+  // 方向键不受影响，保持 D/U + repeat 滚动。
+  if (settings.simLongPress && !DPAD_KEYS.has(key)) {
     simKey = key;
     simLongPressed = false;
     simTimer = setTimeout(() => {
@@ -398,8 +399,8 @@ function sendKeyUp(key: string) {
   const btn = document.querySelector(`[data-key="${key}"]`);
   if (btn) btn.classList.remove("pressed");
 
-  // 模拟长按模式：短按→完整 tap；长按→发送 U 结束保持
-  if (settings.simLongPress) {
+  // 模拟长按模式（仅非方向键）：短按→完整 tap；长按→发送 U 结束保持
+  if (settings.simLongPress && !DPAD_KEYS.has(key)) {
     if (simTimer) { clearTimeout(simTimer); simTimer = null; }
     if (simKey === key) {
       if (simLongPressed) {
