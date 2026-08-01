@@ -6,6 +6,7 @@ COPY package.json bun.lock ./
 RUN bun install --frozen-lockfile
 
 COPY build.ts ./
+COPY index.ts ./
 COPY frontend ./frontend
 COPY public ./public
 RUN bun run build.ts
