@@ -353,15 +353,20 @@ function sendKeyDown(key: string) {
   if (btn) btn.classList.add("pressed");
   vibrate(28); // short tick on press
 
-  // 模拟长按模式：不用 D/U 分离。短按抬起→普通按下(tap)；
-  // 按住超过阈值→longpress(L)。行为更稳定（部分应用对分离事件处理怪异）。
+  // 模拟长按模式：不用 D/U 分离。短按抬起→一次单按；
+  // 长按（≥阈值）→ 在阈值时刻触发一次单按（不等抬起），行为更稳定。
   if (settings.simLongPress) {
     simKey = key;
     simLongPressed = false;
     simTimer = setTimeout(() => {
       simLongPressed = true;
       vibrate(20);
-      sendWS({ keyLong: key }); // L 命令：down + down(FLAG_LONG_PRESS) + up
+      // 长按：触发一次单按（菜单键修复时用 L）
+      if (settings.menuFix && key === "menu") {
+        sendWS({ keyLong: key });
+      } else {
+        sendWS({ key });
+      }
     }, REPEAT_TIMEOUT);
     return;
   }
@@ -392,11 +397,11 @@ function sendKeyUp(key: string) {
   const btn = document.querySelector(`[data-key="${key}"]`);
   if (btn) btn.classList.remove("pressed");
 
-  // 模拟长按模式：短按→普通 tap；长按已由 timer 发送 L，这里只清理
+  // 模拟长按模式：短按→一次单按；长按已由 timer 发送，这里只清理
   if (settings.simLongPress) {
     if (simTimer) { clearTimeout(simTimer); simTimer = null; }
     if (simKey === key && !simLongPressed) {
-      // 短按：普通按下（tap）。菜单键修复时仍用 L
+      // 短按：一次单按（菜单键修复时用 L）
       if (settings.menuFix && key === "menu") {
         sendWS({ keyLong: key });
       } else {
