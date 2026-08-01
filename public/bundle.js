@@ -146,16 +146,10 @@ var s={zh:{appTitle:"\uD83D\uDCFA TV Remote",statusConnected:"已连接",statusD
           </div>
           <input type="checkbox" class="toggle" id="simLongPressToggle">
         </label>
-        <div class="setting-row setting-static" id="vibStatus">
+        <div class="setting-row setting-static">
           <div class="setting-info">
             <div class="setting-name">${o("vibration")}</div>
             <div class="setting-desc" id="vibStatusText"></div>
-          </div>
-        </div>
-        <div class="setting-row setting-static">
-          <div class="setting-info">
-            <div class="setting-name">${o("vibStrength")}</div>
-            <div class="setting-desc">${o("vibStrengthDesc")}</div>
           </div>
           <div class="vib-levels">
             ${d1.map((h)=>`<button class="vib-level-btn" data-level="${h}">${h}</button>`).join("")}
