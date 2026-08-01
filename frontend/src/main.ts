@@ -262,23 +262,29 @@ function applySettings() {
 function setMenuFix(on: boolean) {
   settings.menuFix = on;
   saveSettings();
-  vibrate(12);
+  vibrate(28);
 }
 
 function setDpadRepeat(on: boolean) {
   settings.dpadRepeat = on;
   dpadRepeatEnabled = on;
   saveSettings();
-  vibrate(12);
+  vibrate(28);
 }
 
 function openSettings() {
   applySettings();
-  // Show vibration availability
+  // Show vibration availability + last call result
   const text = document.getElementById("vibStatusText")!;
-  text.textContent = typeof navigator.vibrate === "function"
-    ? t("vibAvailable")
-    : t("vibUnavailable");
+  if (!vibSupported) {
+    text.textContent = t("vibUnavailable");
+  } else if (vibLastOk === false) {
+    text.textContent = t("vibBlocked");
+  } else if (vibLastOk === true) {
+    text.textContent = t("vibWorking");
+  } else {
+    text.textContent = t("vibAvailable");
+  }
   document.getElementById("settingsModal")!.classList.remove("hidden");
 }
 function closeSettings() {
@@ -286,8 +292,21 @@ function closeSettings() {
 }
 
 // ── Vibration feedback ───────────────────────────────
+// Tracks whether the API exists and whether the system accepted the call.
+let vibSupported = typeof navigator.vibrate === "function";
+let vibLastOk: boolean | null = null; // null = never called
+
 function vibrate(pattern: number | number[]) {
-  try { navigator.vibrate?.(pattern); } catch {}
+  try {
+    if (typeof navigator.vibrate === "function") {
+      vibLastOk = navigator.vibrate(pattern);
+      vibSupported = true;
+    } else {
+      vibSupported = false;
+    }
+  } catch {
+    vibSupported = false;
+  }
 }
 
 // ── Key sending ───────────────────────────────────────
@@ -300,7 +319,7 @@ function sendKey(key: string) {
 function sendKeyDown(key: string) {
   const btn = document.querySelector(`[data-key="${key}"]`);
   if (btn) btn.classList.add("pressed");
-  vibrate(12); // short tick on press
+  vibrate(28); // short tick on press
 
   // 菜单键修复：开启时用 L (longpress 序列) 一次性发送，松开不再发 keyup
   if (settings.menuFix && key === "menu") {
@@ -315,7 +334,7 @@ function sendKeyDown(key: string) {
       if (dpadRepeatKey === key) {
         dpadRepeatTimer = setInterval(() => {
           if (dpadRepeatKey === key) {
-            vibrate(6); // light tick during repeat
+            vibrate(14); // light tick during repeat
             sendWS({ keydown: key });
           }
         }, REPEAT_DELAY);
@@ -332,7 +351,7 @@ function sendKeyUp(key: string) {
   if (dpadRepeatKey === key) {
     clearTimeout(dpadRepeatTimeout!); clearInterval(dpadRepeatTimer!);
     dpadRepeatTimeout = dpadRepeatTimer = null; dpadRepeatKey = null;
-    vibrate(8); // release tick after long-press
+    vibrate(20); // release tick after long-press
   }
   sendWS({ keyup: key });
 }
@@ -388,12 +407,12 @@ function sendText() {
   const input = document.getElementById("textInput") as HTMLTextAreaElement;
   const text = input.value.trim();
   if (!text) return;
-  vibrate([15, 25, 15]); // double tick for send
+  vibrate([30, 50, 30]); // double tick for send
   sendWS({ text });
   closeTextModal();
 }
 function clearTextField() {
-  vibrate([10, 20, 10]); // double tick for clear
+  vibrate([25, 40, 25]); // double tick for clear
   sendWS({ clear: true });
 }
 
