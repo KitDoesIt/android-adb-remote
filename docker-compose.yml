@@ -36,6 +36,9 @@ services:
       ADB_DEVICE: ${ADB_DEVICE:?set ADB_DEVICE in .env}
     ports:
       - "8180:8180"
+    volumes:
+      # Persist adb RSA keys so container rebuilds don't invalidate TV auth
+      - ~/.android:/root/.android
     networks:
       - app-net
     depends_on:

@@ -32,6 +32,8 @@ services:
       ADB_DEVICE: 192.168.x.x:5555   # 换成你电视的 IP
     ports:
       - "8180:8180"
+    volumes:
+      - ~/.android:/root/.android    # 持久化 adb key：更新镜像后电视无需重新授权
     restart: unless-stopped
 ```
 
